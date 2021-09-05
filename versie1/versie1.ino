@@ -2,11 +2,11 @@
 #define ON 1
 #define OFF 0
 
-const int SROUT_SHCP = 12;
-const int SROUT_STCP = 13;
-const int SROUT_DS = 14;
-const int SRIN_PL = 15;
-const int SRIN_DS = 16;
+const int SHIFT_REGISTER_CLOCK_INPUT = 12;	// HC595 LED shift register serial clock (high is shift), pin 11 van HC595 SWItCh
+const int SERIAL_REGISTER_CLOCK_INPUT = 13; // HC595 LED storage register clock (high is shift), pin 12 van HC595 SWITCH
+const int SERIAL_DATA_INPUT = 14;			// HC595 LED serial data, pin 14 on HC595
+const int PARALLEL_LOAD_INPUT = 15;			// HC597 SWITCH parallel load (low) of seriële shift, pin 13 van HC597
+const int SERIAL_DATA_INPUT = 16;			// HC587 serial data out, pin 9 van HC597 SWITCH
 
 uint8_t g_panLED[NKOL];
 uint8_t g_panINP[NKOL];
@@ -16,15 +16,15 @@ uint8_t g_activity;
 void setup()
 {
 	memset(g_panINP, 0x00, sizeof(g_panINP));
-	pinMode(SROUT_SHCP, OUTPUT);
-	digitalWrite(SROUT_SHCP, LOW);
-	pinMode(SROUT_STCP, OUTPUT);
-	digitalWrite(SROUT_STCP, LOW);
-	pinMode(SROUT_DS, OUTPUT);
-	digitalWrite(SROUT_DS, LOW);
-	pinMode(SRIN_PL, OUTPUT);
-	digitalWrite(SRIN_PL, LOW);
-	pinMode(SRIN_DS, INPUT);
+	pinMode(SHIFT_REGISTER_CLOCK_INPUT, OUTPUT);
+	digitalWrite(SHIFT_REGISTER_CLOCK_INPUT, LOW);
+	pinMode(SERIAL_REGISTER_CLOCK_INPUT, OUTPUT);
+	digitalWrite(SERIAL_REGISTER_CLOCK_INPUT, LOW);
+	pinMode(SERIAL_DATA_INPUT, OUTPUT);
+	digitalWrite(SERIAL_DATA_INPUT, LOW);
+	pinMode(PARALLEL_LOAD_INPUT, OUTPUT);
+	digitalWrite(PARALLEL_LOAD_INPUT, LOW);
+	pinMode(SERIAL_DATA_INPUT, INPUT);
 	allLEDsOff();
 	g_gamestatus = OFF;
 	g_activity = 0;
@@ -53,41 +53,39 @@ void set_panel_light(uint8_t kolom, uint8_t rij, uint8_t func)
 		g_panLED[kolom] ^= pat;
 }
 
-// read from g_panLED and write to the panel
-void write_to_panel()
+// sync shift registers with local buffers
+void sync_board()
 {
-	int column;
-	int row;
 	uint8_t sd_out;
 	uint8_t sd_inp;
 
-	for (column = 0; column < NKOL; column++)
+	for (uint32_t column = 0; column < NKOL; column++)
 	{
 		sd_out = g_panLED[column];
 		sd_inp = 0;
-		for (row = 0; row < 8; row++)
+		for (uint32_t row = 0; row < 8; row++)
 		{
 			sd_inp = sd_inp << 1;
-			if (digitalRead(SRIN_DS) == LOW)
+			if (digitalRead(SERIAL_DATA_INPUT) == LOW)
 			{
 				g_activity = millis();
 				sd_inp |= 0x01;
 			}
-			digitalWrite(SROUT_DS, sd_out & 1);
-			digitalWrite(SROUT_SHCP, HIGH);
-			digitalWrite(SROUT_SHCP, LOW);
+			digitalWrite(SERIAL_DATA_INPUT, sd_out & 1);
+			digitalWrite(SHIFT_REGISTER_CLOCK_INPUT, HIGH);
+			digitalWrite(SHIFT_REGISTER_CLOCK_INPUT, LOW);
 			sd_out = sd_out >> 1;
 		}
 		g_panINP[column] = sd_inp;
 	}
-	digitalWrite(SRIN_PL, LOW);
-	digitalWrite(SROUT_STCP, HIGH);
-	digitalWrite(SROUT_STCP, LOW);
-	digitalWrite(SRIN_PL, HIGH);
+	digitalWrite(PARALLEL_LOAD_INPUT, LOW);
+	digitalWrite(SERIAL_REGISTER_CLOCK_INPUT, HIGH);
+	digitalWrite(SERIAL_REGISTER_CLOCK_INPUT, LOW);
+	digitalWrite(PARALLEL_LOAD_INPUT, HIGH);
 	if (g_gamestatus == OFF && (g_panINP[0] & (1 << 0)))
 	{
 		g_gamestatus = ON;
-		for (int i = 0; i < 8; i++)
+		for (uint32_t i = 0; i < 8; i++)
 			set_panel_light(0, i, 0);
 	}
 }
@@ -109,7 +107,7 @@ bool snooze_patern()
 	uint32_t t1;
 	uint16_t rij, kol;
 
-	rij = random(8); // Kies random positie
+	rij = random(8);		// Kies random positie
 	t1 = millis();			// Haal huidige tijd
 	if (abs(t1 - t0) < 200) // In wachttijd?
 		return 1;
@@ -126,32 +124,13 @@ bool snooze_patern()
 			set_panel_light(kol, 7 - 3 + rij, 0);
 		rij++;
 	}
-	write_to_panel(); // Toon patroon --> writes to the leds
+	sync_board(); // Toon patroon --> writes to the leds
 	t0 = t1;
-}
-
-// read which buttons are pressed and write into g_panINP
-void read_input()
-{
-	static uint32_t last_read = 0;
-	uint32_t now;
-	uint8_t kdata;
-	bool a_change_happened = false;
-
-	now = millis();
-	if (abs(now - last_read) < 700) // only read input every 700 ms
-		return;
-	for (uint16_t column = 0; column < NKOL; column++)
-		a_change_happend = g_panINP[column];
-	if (a_change_happened)
-		last_read = now;
 }
 
 void check_activity()
 {
-	int	t;
-
-	t = millis();
+	uint32_t t = millis();
 	if (abs(t - g_activity) > 60000)
 	{
 		g_gamestatus = OFF;
@@ -163,8 +142,7 @@ void loop()
 {
 	if (g_gamestatus == OFF)
 		snooze_patern();
-	read_input();
-	write_to_panel();
+	sync_board();
 	check_activity();
 	delay(2);
 }
