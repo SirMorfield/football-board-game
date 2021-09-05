@@ -29,7 +29,6 @@ uint8_t panINP[NKOL] ;                              // Kolommen van 8 bits input
 char    cmd[20] ;                                   // Buffer voor commando via serial
 uint8_t gamestatus ;
 
-
 //******************************************************************************************
 //                                  S E T U P                                              *
 //******************************************************************************************
@@ -53,8 +52,8 @@ void setup()
   digitalWrite ( SRIN_PL, LOW ) ;
   pinMode ( SRIN_DS, INPUT ) ;                       // Serial in van 597
   clearall() ;                                       // Alle rijen uit
-  gamestatus = OFF ;
   //memset ( panLED, 0x5555, sizeof(panLED) ) ;      // Test
+  gamestatus = OFF ;
 }
 
 
@@ -129,9 +128,41 @@ void setdata()
   digitalWrite ( SROUT_STCP, HIGH ) ;                // Storage clockpuls (latch) hoog
   digitalWrite ( SROUT_STCP, LOW ) ;                 // Storage clockpuls laag
   digitalWrite ( SRIN_PL, HIGH ) ;                   // 597 gaat weer schuiven
-  if ( gamestatus == OFF && panINP[0] == HIGH)
+  if ( gamestatus == OFF && panINP[0] == 1)
 	gamestatus == ON;
 }
+// void setdata()
+// {
+//   int      i ;                                       // Teller aantal kolommen
+//   int      j ;                                       // Teller aantal rijen
+//   uint8_t sd_out ;                                   // Serial data out voor 1 kolom
+//   uint8_t sd_inp ;                                   // Serial data in voor 1 kolom
+  
+//   for ( i = 0 ; i < NKOL ; i++ )                     // Doe alle kolommen
+//   {
+//     sd_out = panLED [i] ;
+//     sd_inp = 0 ;                                     // Clear alle inputbits deze kolom
+//     for ( j = 0 ; j < 8 ; j++ )                      // Alle rijen
+//     {
+//       sd_inp = sd_inp << 1 ;                         // Schuif 1 positie
+//       if ( digitalRead ( SRIN_DS ) == LOW )          // Lees contact in deze kolom
+//       {
+//         sd_inp |= 0x01 ;                             // Contact bekrachtigd, set bit
+//       }
+//       digitalWrite ( SROUT_DS, sd_out & 1 ) ;        // Schuif LS bit er in
+//       digitalWrite ( SROUT_SHCP, HIGH ) ;            // Clockpuls hoog
+//       digitalWrite ( SROUT_SHCP, LOW ) ;             // Clockpuls laag
+//       sd_out = sd_out >> 1 ;                         // Schuif data 1 bit
+//     }
+//     panINP[i] = sd_inp ;                             // Vul de kolom met inputs
+//   }
+//   digitalWrite ( SRIN_PL, LOW ) ;                    // Voor 597 parallel load doen 
+//   digitalWrite ( SROUT_STCP, HIGH ) ;                // Storage clockpuls (latch) hoog
+//   digitalWrite ( SROUT_STCP, LOW ) ;                 // Storage clockpuls laag
+//   digitalWrite ( SRIN_PL, HIGH ) ;                   // 597 gaat weer schuiven
+//   if ( gamestatus == OFF && panINP[0] == 1)
+// 	gamestatus == ON;
+// }
 
 
 //******************************************************************************************
@@ -168,10 +199,10 @@ void setall()
 // "0,12,0"   Kolom 0, rij 12 uit                                                          *
 // "3,11,1"   Kolom 3, rij 11 aan                                                          *
 // "test1"    Testpatroon 1                                                                *
-// "test2"    Testpatroon, complementair aan testpatroon 1                             	   *
+// "test2"    Testpatroon, complementair aan testpatroon 1                                *
 // "rand"     Random pattroon                                                              *
 // "pong"     Pong patroon                                                                 *
-// "io"       Toon de input en output voor debug                                           *
+// "io"       Toon de input en output voor debug                                                     *
 //                                                                                         *
 //******************************************************************************************
 bool parse_commando()
@@ -355,16 +386,16 @@ bool scanserial()
   return false ;                                 // Command not completed yet
 }
 
+
 //******************************************************************************************
 //                                    SNOOZE_PATERN                                        *
 //******************************************************************************************
 // patroon wat afspeelt zolang de game niet aan staat								       *
 //******************************************************************************************
-
 bool snooze_patern()
 {
 	static uint32_t	t0 = 0;
-	static uint16_t head = 0;
+	static uint16_t head = -1;
 	int			i;
 	uint32_t	t1;
 	int16_t		tail;
@@ -374,9 +405,9 @@ bool snooze_patern()
     kol = random ( NKOL ) ;
 	tail = head - 4;
 	t1 = millis() ;                                 // Haal huidige tijd
-  if ( /*abs*/ ( t1 - t0 ) < 1000 )                     // In wachttijd?
+  	if ( abs ( t1 - t0 ) < 1000 )                     // In wachttijd?
 	  return 1;
-	t0 = 0;
+	t0 = t1;
 	head++;
 	if (head > 7)
 		head = 0;
@@ -391,16 +422,17 @@ bool snooze_patern()
 			paneel ( kol, head - 3, 1 ) ;
 		if ( head > 3)
 			paneel ( kol, head - 4, 0 ) ;
+		if ( head < 4)
+			paneel ( kol, 7 - 3 + head, 0 ) ;
 	}
 	setdata() ;                                 // Toon patroon
-    //delay ( 100 ) ;
-  }
-
+    delay ( 125 ) ;
+}
 
 //******************************************************************************************
 //                                    H A N D L E _ I N P U T                              *
 //******************************************************************************************
-// Reageer op de input.  Als er wat gebeurt is doen we daarna 1000 milliseconde niets.       *
+// Reageer op de input.  Als er wat gebeurt is doen we daarna 1 seconde niets.             *
 //******************************************************************************************
 void handle_input()
 {
@@ -411,14 +443,14 @@ void handle_input()
   bool            active = false ;                // Test voor iets gedaan
   
   t1 = millis() ;                                 // Haal huidige tijd
-  if ( abs ( t1 - t0 ) < 1000 )                     // In wachttijd?
+  if ( abs ( t1 - t0 ) < 1000 )                   // In wachttijd?
   {
     return ;                                      // Ja, gauw klaar
   }
-//   if ( gamestatus == OFF )
-//   {
-// 	snooze_patern();
-//   }
+  if ( gamestatus == OFF )
+  {
+	snooze_patern();
+  }
   for ( kol = 0 ; kol < NKOL ; kol++ )            // Bekijk alle kolommen
   {
     kdata = panINP[kol] ;                         // Pak input, 8 bits in een kolom
@@ -465,4 +497,3 @@ void loop()
   }
   delay ( 2 ) ;
 }
-
