@@ -119,14 +119,14 @@ bool snooze_patern()
 	rij = head;
 	for (kol = 0; kol < NKOL; kol++)
 	{
-		set_panel_light(kol, rij, 1); // Set set_panel_lightl
+		set_panel_light(kol, rij, 1); // Set set_panel_lightl --> fills data inside shifters
 		if (head > 3)
 			set_panel_light(kol, rij - 4, 0);
 		if (head < 4)
 			set_panel_light(kol, 7 - 3 + rij, 0);
 		rij++;
 	}
-	write_to_panel(); // Toon patroon
+	write_to_panel(); // Toon patroon --> writes to the leds
 	t0 = t1;
 }
 
@@ -142,15 +142,7 @@ void read_input()
 	if (abs(now - last_read) < 700) // only read input every 700 ms
 		return;
 	for (uint16_t column = 0; column < NKOL; column++)
-	{
-		kdata = g_panINP[column];
-		for (uint16_t row = 0; row < 8; row++)
-		{
-			if (kdata & 1)
-				a_change_happened = true;
-			kdata >>= 1;
-		}
-	}
+		a_change_happend = g_panINP[column];
 	if (a_change_happened)
 		last_read = now;
 }
